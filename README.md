@@ -53,7 +53,7 @@ Total Commander, вкладки как в браузере, умный поис�
 
 ```bash
 # 1. Склонируй или скачай репозиторий
-git clone https://github.com/ТВОЙ_НИК/ТВОЙ_РЕПОЗИТОРИЙ.git
+git clone https://github.com/shardinlive-create/Explorer.git
 cd ТВОЙ_РЕПОЗИТОРИЙ
 
 # 2. Запусти
