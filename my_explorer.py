@@ -11,6 +11,14 @@ import tkinter.font as tkfont
 from tkinter import ttk, messagebox
 from pathlib import Path
 
+IS_WIN = os.name == "nt"
+IS_MAC = sys.platform == "darwin"
+IS_LINUX = (not IS_WIN and not IS_MAC)
+
+if IS_WIN: FONT = "Segoe UI"
+elif IS_MAC: FONT = "Helvetica Neue"
+else: FONT = "DejaVu Sans"
+
 BG="#EAF6FF"; PANEL="#D7EDFF"; TOOLBAR="#C7E6FF"
 BUTTON="#A7D8FF"; BUTTON_HOVER="#86C8FF"; BUTTON_PRESSED="#63B4FF"
 ACCENT="#2E90FF"; ACCENT_HOVER="#1D7CEA"; ACCENT_PRESSED="#1468CF"
@@ -20,7 +28,7 @@ IMAGE_EXTS={".png",".jpg",".jpeg",".gif",".bmp",".webp",".ico",".tif",".tiff"}
 AUDIO_EXTS={".mp3",".wav",".flac",".aac",".ogg",".m4a",".wma",".opus"}
 VIDEO_EXTS={".mp4",".avi",".mkv",".mov",".wmv",".flv",".webm",".m4v",".mpg",".mpeg"}
 ARCHIVE_EXTS={".zip",".rar",".7z",".tar",".gz",".bz2",".xz",".iso"}
-EXEC_EXTS={".exe",".msi",".bat",".cmd",".ps1",".appx"}
+EXEC_EXTS={".exe",".msi",".bat",".cmd",".ps1",".appx",".sh"}
 DOCUMENT_EXTS={".doc",".docx",".odt",".rtf",".txt",".xlsx",".xls",".csv",".ppt",".pptx"}
 PDF_EXTS={".pdf"}
 CODE_EXTS={".py",".js",".html",".css",".json",".xml",".c",".cpp",".cs",".java",".php",".sh"}
@@ -60,7 +68,7 @@ class ModernButton(tk.Canvas):
         self.hover=hex_to_rgb(ACCENT_HOVER if accent else BUTTON_HOVER)
         self.press=hex_to_rgb(ACCENT_PRESSED if accent else BUTTON_PRESSED)
         self.cur=list(self.base); self.tgt=list(self.base); self._anim=None
-        f=tkfont.Font(family="Segoe UI",size=9,weight="bold")
+        f=tkfont.Font(family=FONT,size=9,weight="bold")
         w=int(f.measure(text))+padx*2
         super().__init__(master,width=w,height=height,bg=bg,highlightthickness=0,bd=0,cursor="hand2",**kw)
         self.w=w; self.h=height; self.r=radius
@@ -72,7 +80,7 @@ class ModernButton(tk.Canvas):
         self.bind("<ButtonRelease-1>",self._release)
     def set_text(self,t):
         self.text=t
-        f=tkfont.Font(family="Segoe UI",size=9,weight="bold")
+        f=tkfont.Font(family=FONT,size=9,weight="bold")
         self.w=int(f.measure(t))+self.pad*2
         self.configure(width=self.w)
         self._draw()
@@ -84,7 +92,7 @@ class ModernButton(tk.Canvas):
         self._shapes.append(self.create_rectangle(x0,y0+r,x1,y1-r,fill=col,outline=""))
         for cx,cy in ((x0,y0),(x1-2*r,y0),(x0,y1-2*r),(x1-2*r,y1-2*r)):
             self._shapes.append(self.create_oval(cx,cy,cx+2*r,cy+2*r,fill=col,outline=""))
-        self._txt=self.create_text(self.w/2,self.h/2,text=self.text,fill=self.fgcol,font=("Segoe UI",9,"bold"))
+        self._txt=self.create_text(self.w/2,self.h/2,text=self.text,fill=self.fgcol,font=(FONT,9,"bold"))
     def _go(self,rgb):
         self.tgt=list(rgb)
         if self._anim is None: self._tick()
@@ -113,8 +121,8 @@ def ask_text(parent,title,label,initial=""):
     dialog.geometry(f"{w}x{h}+{max(x,0)}+{max(y,0)}")
     fade_window(dialog)
     result=None
-    tk.Label(dialog,text=label,bg=BG,fg=TEXT,font=("Segoe UI",10,"bold")).pack(pady=(18,6),padx=20,anchor="w")
-    entry=tk.Entry(dialog,font=("Segoe UI",11),bg="white",fg=TEXT,relief="solid",bd=1,highlightthickness=0)
+    tk.Label(dialog,text=label,bg=BG,fg=TEXT,font=(FONT,10,"bold")).pack(pady=(18,6),padx=20,anchor="w")
+    entry=tk.Entry(dialog,font=(FONT,11),bg="white",fg=TEXT,relief="solid",bd=1,highlightthickness=0)
     entry.pack(fill="x",padx=20,ipady=6); entry.insert(0,initial); entry.select_range(0,tk.END); entry.focus()
     def ok(e=None):
         nonlocal result; result=entry.get().strip(); dialog.destroy()
@@ -152,23 +160,51 @@ def human_size(size):
         size/=1024
 
 def get_drives():
-    if os.name=="nt":
+    if IS_WIN:
         try:
             import ctypes; b=ctypes.windll.kernel32.GetLogicalDrives(); d=[]
             for i in range(26):
                 if b&(1<<i): d.append(f"{chr(ord('A')+i)}:\\")
             return d
         except Exception: return ["C:\\"]
-    return ["/"]
+    elif IS_MAC:
+        try:
+            vols=[str(p) for p in Path("/Volumes").iterdir()]
+            return vols if vols else ["/"]
+        except Exception: return ["/"]
+    else:
+        roots=["/"]
+        for base in ("/media","/mnt"):
+            try:
+                for p in Path(base).iterdir(): roots.append(str(p))
+            except Exception: pass
+        return roots
+
+def _first_existing(candidates):
+    for c in candidates:
+        try:
+            p=Path(c)
+            if p.exists(): return p
+        except Exception: pass
+    return None
 
 def get_quick_links():
-    home=Path.home(); windir=Path(os.environ.get("WINDIR","C:\\Windows"))
-    items=[("Рабочий стол",home/"Desktop"),("Документы",home/"Documents"),("Загрузки",home/"Downloads"),
-        ("Изображения",home/"Pictures"),("Музыка",home/"Music"),("Видео",home/"Videos")]
-    items+=[("Папка Windows",windir),("System32",windir/"System32"),("Sysnative (реальный System32)",windir/"Sysnative"),
-        ("SysWOW64",windir/"SysWOW64"),("Program Files",Path(os.environ.get("ProgramFiles","C:\\Program Files"))),
-        ("Program Files (x86)",Path(os.environ.get("ProgramFiles(x86)","C:\\Program Files (x86)"))),
-        ("ProgramData",Path(os.environ.get("ProgramData","C:\\ProgramData")))]
+    home=Path.home(); items=[]
+    for label,names in [("Рабочий стол",["Desktop","Рабочий стол"]),
+                        ("Документы",["Documents","Документы"]),
+                        ("Загрузки",["Downloads","Загрузки"]),
+                        ("Изображения",["Pictures","Изображения"]),
+                        ("Музыка",["Music","Музыка"]),
+                        ("Видео",["Videos","Видео"])]:
+        p=_first_existing([home/n for n in names])
+        if p: items.append((label,p))
+    if IS_WIN:
+        windir=Path(os.environ.get("WINDIR","C:\\Windows"))
+        items+=[("Папка Windows",windir),("System32",windir/"System32"),
+            ("Sysnative (реальный System32)",windir/"Sysnative"),("SysWOW64",windir/"SysWOW64"),
+            ("Program Files",Path(os.environ.get("ProgramFiles","C:\\Program Files"))),
+            ("Program Files (x86)",Path(os.environ.get("ProgramFiles(x86)","C:\\Program Files (x86)"))),
+            ("ProgramData",Path(os.environ.get("ProgramData","C:\\ProgramData")))]
     res=[]
     for n,p in items:
         try:
@@ -179,13 +215,22 @@ def get_quick_links():
 
 def open_file(path):
     try:
-        if os.name=="nt": os.startfile(str(path))
+        if IS_WIN: os.startfile(str(path))
+        elif IS_MAC: subprocess.Popen(["open",str(path)])
         else: subprocess.Popen(["xdg-open",str(path)])
     except Exception as e: messagebox.showerror("Ошибка",f"Не удалось открыть файл:\n{path}\n\n{e}")
 
 def open_notepad(path):
-    try: subprocess.Popen(["notepad.exe",str(path)])
-    except Exception as e: messagebox.showerror("Ошибка",f"Не удалось открыть Блокнот:\n{e}")
+    try:
+        if IS_WIN: subprocess.Popen(["notepad.exe",str(path)])
+        elif IS_MAC: subprocess.Popen(["open","-a","TextEdit",str(path)])
+        else:
+            ed=None
+            for t in (os.environ.get("EDITOR"),"gedit","kate","xed","mousepad"):
+                if t and shutil.which(t): ed=t; break
+            if ed: subprocess.Popen([ed,str(path)])
+            else: subprocess.Popen(["xdg-open",str(path)])
+    except Exception as e: messagebox.showerror("Ошибка",f"Не удалось открыть редактор:\n{e}")
 
 def is_inside(child,parent):
     try: child.relative_to(parent); return True
@@ -194,7 +239,7 @@ def is_inside(child,parent):
 def is_hidden(path):
     try:
         if path.name.startswith("."): return True
-        if os.name=="nt":
+        if IS_WIN:
             import stat as sm
             return bool(path.stat().st_file_attributes & sm.FILE_ATTRIBUTE_HIDDEN)
     except Exception: pass
@@ -211,13 +256,14 @@ def get_unique_destination(dest):
         c+=1
 
 def is_admin():
-    if os.name!="nt": return False
     try:
-        import ctypes; return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        if IS_WIN:
+            import ctypes; return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        return os.geteuid()==0
     except Exception: return False
 
 def relaunch_as_admin():
-    if os.name!="nt": return False
+    if not IS_WIN: return False
     try:
         import ctypes
         r=ctypes.windll.shell32.ShellExecuteW(None,"runas",sys.executable,f'"{os.path.abspath(sys.argv[0])}"',None,1)
@@ -225,17 +271,26 @@ def relaunch_as_admin():
     except Exception: return False
 
 def send_to_recycle_bin(path):
-    if os.name!="nt": return False
     try:
-        import ctypes; from ctypes import wintypes
-        class S(ctypes.Structure):
-            _fields_=[("hwnd",wintypes.HWND),("wFunc",wintypes.UINT),("pFrom",ctypes.c_void_p),
-                ("pTo",ctypes.c_void_p),("fFlags",ctypes.c_ushort),("fAnyOperationsAborted",wintypes.BOOL),
-                ("hNameMappings",ctypes.c_void_p),("lpszProgressTitle",wintypes.LPCWSTR)]
-        buf=ctypes.create_unicode_buffer(str(path)+"\0")
-        op=S(); op.hwnd=None; op.wFunc=3; op.pFrom=ctypes.cast(buf,ctypes.c_void_p); op.pTo=None
-        op.fFlags=0x0040|0x0010|0x0004|0x0400; op.fAnyOperationsAborted=False; op.hNameMappings=None; op.lpszProgressTitle=None
-        return ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))==0
+        if IS_WIN:
+            import ctypes; from ctypes import wintypes
+            class S(ctypes.Structure):
+                _fields_=[("hwnd",wintypes.HWND),("wFunc",wintypes.UINT),("pFrom",ctypes.c_void_p),
+                    ("pTo",ctypes.c_void_p),("fFlags",ctypes.c_ushort),("fAnyOperationsAborted",wintypes.BOOL),
+                    ("hNameMappings",ctypes.c_void_p),("lpszProgressTitle",wintypes.LPCWSTR)]
+            buf=ctypes.create_unicode_buffer(str(path)+"\0")
+            op=S(); op.hwnd=None; op.wFunc=3; op.pFrom=ctypes.cast(buf,ctypes.c_void_p); op.pTo=None
+            op.fFlags=0x0040|0x0010|0x0004|0x0400; op.fAnyOperationsAborted=False; op.hNameMappings=None; op.lpszProgressTitle=None
+            return ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))==0
+        elif IS_MAC:
+            trash=Path.home()/".Trash"; trash.mkdir(exist_ok=True)
+            dest=get_unique_destination(trash/Path(path).name)
+            shutil.move(str(path),str(dest)); return True
+        else:
+            for cmd in (["gio","trash",str(path)],["trash-put",str(path)]):
+                if shutil.which(cmd[0]):
+                    subprocess.run(cmd,check=True); return True
+            return False
     except Exception: return False
 
 def delete_path(path):
@@ -271,7 +326,7 @@ def show_properties_dialog(parent,paths):
                 lines.append(f"Размер папки: {human_size(total)}")
             lines.append(f"Изменён: {datetime.datetime.fromtimestamp(st.st_mtime):%d.%m.%Y %H:%M}")
             lines.append(f"Создан: {datetime.datetime.fromtimestamp(st.st_ctime):%d.%m.%Y %H:%M}")
-            if os.name=="nt":
+            if IS_WIN:
                 import stat as sm
                 lines.append(f"Скрытый: {'Да' if st.st_file_attributes & sm.FILE_ATTRIBUTE_HIDDEN else 'Нет'}")
         except Exception: lines.append("Нет доступа к сведениям")
@@ -286,7 +341,7 @@ def show_properties_dialog(parent,paths):
         lines.append(f"Файлов: {cnt}")
         lines.append(f"Общий размер файлов: {human_size(total)}")
     for line in lines:
-        tk.Label(dialog,text=line,bg=BG,fg=TEXT,anchor="w",font=("Segoe UI",10),wraplength=560,justify="left").pack(fill="x",padx=20,pady=2)
+        tk.Label(dialog,text=line,bg=BG,fg=TEXT,anchor="w",font=(FONT,10),wraplength=560,justify="left").pack(fill="x",padx=20,pady=2)
     ModernButton(dialog,text="Закрыть",command=dialog.destroy,accent=True).pack(pady=14)
 
 def apply_style(root):
@@ -294,10 +349,10 @@ def apply_style(root):
     try: style.theme_use("clam")
     except Exception: pass
     style.configure("TNotebook",background=BG,bordercolor=BORDER)
-    style.configure("TNotebook.Tab",background=BUTTON,foreground=TEXT,padding=(12,6),font=("Segoe UI",9,"bold"))
+    style.configure("TNotebook.Tab",background=BUTTON,foreground=TEXT,padding=(12,6),font=(FONT,9,"bold"))
     style.map("TNotebook.Tab",background=[("selected",ACCENT)],foreground=[("selected","white")])
-    style.configure("Treeview",background=LIST_BG,fieldbackground=LIST_BG,foreground="#123249",rowheight=30,bordercolor=BORDER,font=("Segoe UI",10))
-    style.configure("Treeview.Heading",background=BUTTON,foreground=TEXT,bordercolor=BORDER,relief="flat",padding=5,font=("Segoe UI",9,"bold"))
+    style.configure("Treeview",background=LIST_BG,fieldbackground=LIST_BG,foreground="#123249",rowheight=30,bordercolor=BORDER,font=(FONT,10))
+    style.configure("Treeview.Heading",background=BUTTON,foreground=TEXT,bordercolor=BORDER,relief="flat",padding=5,font=(FONT,9,"bold"))
     style.map("Treeview",background=[("selected",SELECT_BG)],foreground=[("selected",TEXT)])
     style.configure("Vertical.TScrollbar",background=BUTTON,troughcolor=BG,bordercolor=BORDER,arrowcolor=TEXT)
     style.map("Vertical.TScrollbar",background=[("active",BUTTON_HOVER),("pressed",BUTTON_PRESSED)])
@@ -310,7 +365,7 @@ class FilePanel:
         self.history=[]; self.history_index=-1; self.filter_text=""
         self.sort_key="name"; self.sort_reverse=False
         self.frame=tk.Frame(parent,bg=BG,padx=4,pady=4)
-        self.header=tk.Label(self.frame,text="",bg=PANEL,fg=TEXT,anchor="w",font=("Segoe UI",9,"bold"),padx=6,pady=5)
+        self.header=tk.Label(self.frame,text="",bg=PANEL,fg=TEXT,anchor="w",font=(FONT,9,"bold"),padx=6,pady=5)
         self.header.pack(fill="x")
         inner=tk.Frame(self.frame,bg=BG); inner.pack(fill="both",expand=True)
         self.tree=ttk.Treeview(inner,columns=("name","type","size"),show="headings",selectmode="extended")
@@ -460,7 +515,7 @@ class FilePanel:
         self.tree.focus(s[0]); iid=self.tree.focus()
         if not iid or iid in ("__no_access__","__searching__"):
             if iid=="__no_access__":
-                messagebox.showinfo("Нет доступа","Эта папка защищена Windows.\nНажми кнопку «Админ» сверху.")
+                messagebox.showinfo("Нет доступа","Эта папка защищена системой.\nНажми кнопку «Админ» сверху.")
             return
         p=Path(iid)
         try:
@@ -547,8 +602,7 @@ class DualView:
     def set_single(self,single):
         self.single=single
         if single:
-            self.sep.pack_forget()
-            self.right.frame.pack_forget()
+            self.sep.pack_forget(); self.right.frame.pack_forget()
             self.active=self.left
             self.left.set_active(True); self.right.set_active(False)
         else:
@@ -559,7 +613,7 @@ class DualView:
 class ExplorerApp:
     def __init__(self,root):
         self.root=root
-        root.title("Мой проводник — две панели, вкладки, поиск")
+        root.title("Мой Проводник — две панели, вкладки, поиск")
         root.geometry("1450x760"); root.minsize(1100,620)
         apply_style(root)
         self.clipboard=None; self.tab_counter=0; self.admin=is_admin()
@@ -577,7 +631,7 @@ class ExplorerApp:
         self.disks_button=ModernButton(top,text="Диски",command=self.show_drives_menu); self.disks_button.pack(side="left",padx=4)
         self.panel_button=ModernButton(top,text="2 панели",command=self.toggle_panels); self.panel_button.pack(side="left",padx=4)
         ModernButton(top,text="Админ ✓" if self.admin else "Админ",command=self.admin_click,accent=self.admin).pack(side="left",padx=4)
-        self.path_entry=tk.Entry(top,textvariable=self.path_var,state="readonly",readonlybackground="white",bg="white",fg=TEXT,relief="flat",font=("Segoe UI",10),highlightthickness=1,highlightbackground=BORDER,highlightcolor=BORDER)
+        self.path_entry=tk.Entry(top,textvariable=self.path_var,state="readonly",readonlybackground="white",bg="white",fg=TEXT,relief="flat",font=(FONT,10),highlightthickness=1,highlightbackground=BORDER,highlightcolor=BORDER)
         self.path_entry.pack(side="left",fill="x",expand=True,padx=8)
         ModernButton(top,text="Проводник",command=self.open_in_explorer,accent=True).pack(side="left",padx=(4,0))
 
@@ -596,30 +650,30 @@ class ExplorerApp:
         ModernButton(act,text="Выделить всё",command=self.select_all).pack(side="left",padx=4)
 
         sb=tk.Frame(self.root,bg=TOOLBAR,padx=6,pady=5); sb.pack(fill="x")
-        tk.Label(sb,text="Поиск:",bg=TOOLBAR,fg=TEXT,font=("Segoe UI",10,"bold")).pack(side="left",padx=(0,6))
-        self.search_entry=tk.Entry(sb,textvariable=self.search_var,bg="white",fg=TEXT,relief="flat",font=("Segoe UI",10),highlightthickness=1,highlightbackground=BORDER,highlightcolor=BORDER)
+        tk.Label(sb,text="Поиск:",bg=TOOLBAR,fg=TEXT,font=(FONT,10,"bold")).pack(side="left",padx=(0,6))
+        self.search_entry=tk.Entry(sb,textvariable=self.search_var,bg="white",fg=TEXT,relief="flat",font=(FONT,10),highlightthickness=1,highlightbackground=BORDER,highlightcolor=BORDER)
         self.search_entry.pack(side="left",fill="x",expand=True,padx=6,ipady=4)
         self.search_entry.bind("<KeyRelease>",lambda e:self.on_search_changed())
         ModernButton(sb,text="Очистить",command=self.clear_search).pack(side="left",padx=(6,6))
-        tk.Checkbutton(sb,text="включая подпапки",variable=self.deep_search,bg=TOOLBAR,fg=TEXT,activebackground=TOOLBAR,selectcolor="white",font=("Segoe UI",9,"bold"),command=self.on_search_options).pack(side="left",padx=4)
-        tk.Checkbutton(sb,text="скрытые",variable=self.show_hidden,bg=TOOLBAR,fg=TEXT,activebackground=TOOLBAR,selectcolor="white",font=("Segoe UI",9,"bold"),command=self.on_search_options).pack(side="left",padx=4)
+        tk.Checkbutton(sb,text="включая подпапки",variable=self.deep_search,bg=TOOLBAR,fg=TEXT,activebackground=TOOLBAR,selectcolor="white",font=(FONT,9,"bold"),command=self.on_search_options).pack(side="left",padx=4)
+        tk.Checkbutton(sb,text="скрытые",variable=self.show_hidden,bg=TOOLBAR,fg=TEXT,activebackground=TOOLBAR,selectcolor="white",font=(FONT,9,"bold"),command=self.on_search_options).pack(side="left",padx=4)
 
-        self.status=tk.Label(self.root,text="",bg=TOOLBAR,fg=TEXT,anchor="w",font=("Segoe UI",9),padx=10,pady=6)
+        self.status=tk.Label(self.root,text="",bg=TOOLBAR,fg=TEXT,anchor="w",font=(FONT,9),padx=10,pady=6)
         self.status.pack(side="bottom",fill="x")
         self.notebook=ttk.Notebook(self.root); self.notebook.pack(fill="both",expand=True,padx=6,pady=6)
         self.notebook.bind("<<NotebookTabChanged>>",lambda e:self.update_ui())
         self.build_drives_menu(); self.build_context_menu()
 
     def build_drives_menu(self):
-        self.drives_menu=tk.Menu(self.root,tearoff=0,bg="#F4FBFF",fg=TEXT,activebackground=SELECT_BG,activeforeground=TEXT,font=("Segoe UI",10),relief="flat",bd=0)
+        self.drives_menu=tk.Menu(self.root,tearoff=0,bg="#F4FBFF",fg=TEXT,activebackground=SELECT_BG,activeforeground=TEXT,font=(FONT,10),relief="flat",bd=0)
         for n,p in get_quick_links(): self.drives_menu.add_command(label=n,command=lambda x=p:self.navigate_active(x))
         self.drives_menu.add_separator()
         for d in get_drives(): self.drives_menu.add_command(label=d,command=lambda x=d:self.navigate_active(x))
 
     def build_context_menu(self):
-        m=tk.Menu(self.root,tearoff=0,bg="#F4FBFF",fg=TEXT,activebackground=SELECT_BG,activeforeground=TEXT,font=("Segoe UI",10),relief="flat",bd=0)
+        m=tk.Menu(self.root,tearoff=0,bg="#F4FBFF",fg=TEXT,activebackground=SELECT_BG,activeforeground=TEXT,font=(FONT,10),relief="flat",bd=0)
         m.add_command(label="Открыть",command=self.open_selected)
-        m.add_command(label="Открыть в Блокноте",command=self.open_notepad_selected); m.add_separator()
+        m.add_command(label="Открыть в редакторе",command=self.open_notepad_selected); m.add_separator()
         m.add_command(label="Вырезать",command=self.cut_selected)
         m.add_command(label="Копировать",command=self.copy_selected)
         m.add_command(label="Вставить",command=self.paste_items); m.add_separator()
@@ -633,7 +687,7 @@ class ExplorerApp:
         m.add_command(label="Найти дубликаты",command=self.find_duplicates); m.add_separator()
         m.add_command(label="Копировать путь",command=self.copy_path)
         m.add_command(label="Свойства",command=self.show_properties)
-        m.add_command(label="Командная строка здесь",command=self.open_cmd_here); m.add_separator()
+        m.add_command(label="Терминал здесь",command=self.open_cmd_here); m.add_separator()
         m.add_command(label="Обновить",command=self.refresh)
         self.context_menu=m
 
@@ -670,7 +724,9 @@ class ExplorerApp:
 
     def admin_click(self):
         if self.admin: messagebox.showinfo("Администратор","Программа уже запущена с правами администратора."); return
-        if not messagebox.askyesno("Администратор","Перезапустить программу от имени администратора?\n\nПоявится окно Windows — нажми «Да»."): return
+        if not IS_WIN:
+            messagebox.showinfo("Администратор","На этой системе перезапуск от администратора не поддерживается.\nЗапусти программу через sudo / с правами root вручную."); return
+        if not messagebox.askyesno("Администратор","Перезапустить программу от имени администратора?\n\nПоявится окно системы — нажми «Да»."): return
         if relaunch_as_admin(): self.root.destroy()
         else: messagebox.showwarning("Администратор","Не удалось запустить от имени администратора.")
 
@@ -776,9 +832,10 @@ class ExplorerApp:
         p=self.active_panel()
         if not p: return
         try:
-            if os.name=="nt": os.startfile(str(p.current_path))
+            if IS_WIN: os.startfile(str(p.current_path))
+            elif IS_MAC: subprocess.Popen(["open",str(p.current_path)])
             else: subprocess.Popen(["xdg-open",str(p.current_path)])
-        except Exception as e: messagebox.showerror("Ошибка",f"Не удалось открыть Проводник:\n{p.current_path}\n\n{e}")
+        except Exception as e: messagebox.showerror("Ошибка",f"Не удалось открыть системный проводник:\n{p.current_path}\n\n{e}")
     def new_folder(self):
         p=self.active_panel()
         if p: p.create_folder()
@@ -801,7 +858,7 @@ class ExplorerApp:
         p=self.active_panel()
         if not p: return
         s=[x for x in p.get_selected_paths() if x not in ("__no_access__","__searching__")]
-        if not s: messagebox.showinfo("Блокнот","Сначала выбери файл."); return
+        if not s: messagebox.showinfo("Редактор","Сначала выбери файл."); return
         for x in s:
             pp=Path(x)
             if pp.is_file(): open_notepad(pp)
@@ -832,8 +889,18 @@ class ExplorerApp:
     def open_cmd_here(self):
         p=self.active_panel()
         if not p: return
-        try: subprocess.Popen(["cmd","/k",f'cd /d "{p.current_path}"'],cwd=str(p.current_path))
-        except Exception as e: messagebox.showerror("Ошибка",f"Не удалось открыть командную строку:\n{e}")
+        try:
+            if IS_WIN:
+                subprocess.Popen(["cmd","/k",f'cd /d "{p.current_path}"'],cwd=str(p.current_path))
+            elif IS_MAC:
+                subprocess.Popen(["open","-a","Terminal",str(p.current_path)])
+            else:
+                term=None
+                for t in ("x-terminal-emulator","gnome-terminal","konsole","xterm"):
+                    if shutil.which(t): term=t; break
+                if term: subprocess.Popen([term],cwd=str(p.current_path))
+                else: messagebox.showinfo("Терминал","Не найден установленный терминал.")
+        except Exception as e: messagebox.showerror("Ошибка",f"Не удалось открыть терминал:\n{e}")
 
     def bulk_rename(self):
         p=self.active_panel()
@@ -844,17 +911,17 @@ class ExplorerApp:
         dialog.transient(self.root); dialog.grab_set(); dialog.geometry("640x520")
         fade_window(dialog)
         f1=tk.Frame(dialog,bg=BG); f1.pack(fill="x",padx=16,pady=8)
-        tk.Label(f1,text="Найти:",bg=BG,fg=TEXT,font=("Segoe UI",10,"bold")).pack(side="left")
+        tk.Label(f1,text="Найти:",bg=BG,fg=TEXT,font=(FONT,10,"bold")).pack(side="left")
         find_var=tk.StringVar(); tk.Entry(f1,textvariable=find_var,bg="white",fg=TEXT,relief="solid",bd=1,width=16).pack(side="left",padx=4)
-        tk.Label(f1,text="Заменить на:",bg=BG,fg=TEXT,font=("Segoe UI",10,"bold")).pack(side="left")
+        tk.Label(f1,text="Заменить на:",bg=BG,fg=TEXT,font=(FONT,10,"bold")).pack(side="left")
         repl_var=tk.StringVar(); tk.Entry(f1,textvariable=repl_var,bg="white",fg=TEXT,relief="solid",bd=1,width=16).pack(side="left",padx=4)
         f2=tk.Frame(dialog,bg=BG); f2.pack(fill="x",padx=16)
-        num_var=tk.BooleanVar(); tk.Checkbutton(f2,text="Добавить номер",variable=num_var,bg=BG,fg=TEXT,selectcolor="white",activebackground=BG,font=("Segoe UI",10)).pack(side="left")
+        num_var=tk.BooleanVar(); tk.Checkbutton(f2,text="Добавить номер",variable=num_var,bg=BG,fg=TEXT,selectcolor="white",activebackground=BG,font=(FONT,10)).pack(side="left")
         start_var=tk.StringVar(value="1"); tk.Entry(f2,textvariable=start_var,bg="white",fg=TEXT,relief="solid",bd=1,width=6).pack(side="left",padx=4)
-        tk.Label(f2,text="(с какого числа)",bg=BG,fg=TEXT,font=("Segoe UI",9)).pack(side="left")
-        date_var=tk.BooleanVar(); tk.Checkbutton(f2,text="Добавить дату",variable=date_var,bg=BG,fg=TEXT,selectcolor="white",activebackground=BG,font=("Segoe UI",10)).pack(side="left",padx=(16,0))
-        tk.Label(dialog,text="Предпросмотр:",bg=BG,fg=TEXT,font=("Segoe UI",10,"bold")).pack(anchor="w",padx=16,pady=(8,2))
-        prev=tk.Text(dialog,bg="#FBFEFF",fg="#123249",font=("Consolas",10),relief="solid",bd=1)
+        tk.Label(f2,text="(с какого числа)",bg=BG,fg=TEXT,font=(FONT,9)).pack(side="left")
+        date_var=tk.BooleanVar(); tk.Checkbutton(f2,text="Добавить дату",variable=date_var,bg=BG,fg=TEXT,selectcolor="white",activebackground=BG,font=(FONT,10)).pack(side="left",padx=(16,0))
+        tk.Label(dialog,text="Предпросмотр:",bg=BG,fg=TEXT,font=(FONT,10,"bold")).pack(anchor="w",padx=16,pady=(8,2))
+        prev=tk.Text(dialog,bg="#FBFEFF",fg="#123249",font=(FONT,10),relief="solid",bd=1)
         prev.pack(fill="both",expand=True,padx=16)
         def build():
             res=[]
@@ -898,7 +965,7 @@ class ExplorerApp:
         dialog=tk.Toplevel(self.root); dialog.title("Поиск дубликатов..."); dialog.configure(bg=BG)
         dialog.geometry("900x520"); dialog.transient(self.root)
         fade_window(dialog)
-        tk.Label(dialog,text="Ищем одинаковые файлы в текущей папке и подпапках...\nЭто может занять время.",bg=BG,fg=TEXT,font=("Segoe UI",10,"bold")).pack(pady=10)
+        tk.Label(dialog,text="Ищем одинаковые файлы в текущей папке и подпапках...\nЭто может занять время.",bg=BG,fg=TEXT,font=(FONT,10,"bold")).pack(pady=10)
         tree=ttk.Treeview(dialog,columns=("name","size","path"),show="headings")
         tree.heading("name",text="Имя"); tree.heading("size",text="Размер"); tree.heading("path",text="Путь")
         tree.column("name",width=220,anchor="w"); tree.column("size",width=90,anchor="e"); tree.column("path",width=520,anchor="w")
@@ -1009,10 +1076,11 @@ class ExplorerApp:
 
 def main():
     root=tk.Tk()
-    root.attributes("-alpha",0.0)
+    try: root.attributes("-alpha",0.0)
+    except Exception: pass
     app=ExplorerApp(root)
     fade_window(root,duration=400)
     root.mainloop()
 
 if __name__=="__main__":
-    main() 
+    main()
